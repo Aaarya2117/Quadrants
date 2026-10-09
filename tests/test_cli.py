@@ -104,6 +104,20 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("does not exist yet", out.getvalue())
 
+    def test_demo_auto_runs_scripted_flow(self):
+        out = io.StringIO()
+        code = main(["--backend", "stub", "demo", "--auto", "--fast"], out=out)
+        self.assertEqual(code, 0)
+        self.assertIn("Result: PASS (6/6 steps)", out.getvalue())
+
+    def test_demo_defaults_to_interactive_menu(self):
+        out = io.StringIO()
+        with mock.patch("builtins.input", side_effect=["0"]):
+            code = main(["--backend", "stub", "demo"], out=out)
+        self.assertEqual(code, 0)
+        self.assertIn("ML MODEL SWAP - INTERACTIVE DEMO CONSOLE", out.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()
+

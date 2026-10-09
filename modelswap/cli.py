@@ -129,10 +129,8 @@ def _run_demo(args: argparse.Namespace, out: TextIO) -> int:
             show_failure=args.show_failure,
         )
 
-        is_interactive = getattr(args, "interactive", False) or (
-            not args.fast and not getattr(args, "auto", False) and sys.stdin.isatty()
-        )
-        if is_interactive:
+        # Run interactive console by default unless --auto is explicitly passed
+        if not getattr(args, "auto", False):
             return run_interactive_menu(
                 engine,
                 backend,
