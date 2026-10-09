@@ -9,15 +9,7 @@ import yaml
 from modelswap.results import DEFAULT_MAX_LATENCY_MS, EngineError, RoleStatus
 
 DEFAULT_REGISTRY = Path("models.yaml")
-CLI_DEFAULT_STATE = Path(".modelswap") / "state.json"
 ROLE_ALIASES = {"classifier_role": "classifier"}
-
-
-def resolve_registry_path(state_file: Path | None) -> Path:
-    """Map the CLI state file to a registry path (the CLI default means models.yaml)."""
-    if state_file is None or Path(state_file) == CLI_DEFAULT_STATE:
-        return DEFAULT_REGISTRY
-    return Path(state_file)
 
 
 def load_registry(path: Path) -> dict:
@@ -25,7 +17,7 @@ def load_registry(path: Path) -> dict:
     path = Path(path)
     if not path.is_file():
         raise EngineError(f"registry file not found: {path}")
-    config = yaml.safe_load(path.read_text())
+    config = yaml.safe_load(path.read_text(encoding="utf-8"))
     if not isinstance(config, dict) or not config.get("roles"):
         raise EngineError(f"registry {path} is empty or has no 'roles' section")
     return config
@@ -63,8 +55,7 @@ def get(role: str, registry_path: Path | None = None):
     """Load the role's current model in eval mode."""
     from modelswap import arch
 
-    path = resolve_registry_path(registry_path)
-    status = get_status(path, role)
+    status = get_status(Path(registry_path or DEFAULT_REGISTRY), role)
     model = arch.load_checkpoint(status.current)
     model.eval()
     return model

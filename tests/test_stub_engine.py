@@ -29,8 +29,8 @@ class StubEngineTests(unittest.TestCase):
     def test_compare_uses_stub_metrics(self):
         result = self.engine.compare(ROLE, MODEL_B)
         self.assertEqual(result.model_a.model, INITIAL_CURRENT)
-        self.assertAlmostEqual(result.model_a.accuracy, 0.82)
-        self.assertAlmostEqual(result.model_b.accuracy, 0.94)
+        self.assertAlmostEqual(result.model_a.accuracy, 0.8508)
+        self.assertAlmostEqual(result.model_b.accuracy, 0.9375)
         self.assertTrue(result.eligible)
 
     def test_apply_promotes_candidate_and_keeps_previous(self):

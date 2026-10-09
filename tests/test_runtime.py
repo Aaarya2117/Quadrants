@@ -25,10 +25,8 @@ class RuntimeTests(unittest.TestCase):
         self.path = Path(self.tmp.name) / "models.yaml"
         self.path.write_text(YAML)
 
-    def test_resolve_registry_path(self):
-        self.assertEqual(runtime.resolve_registry_path(None), runtime.DEFAULT_REGISTRY)
-        self.assertEqual(runtime.resolve_registry_path(runtime.CLI_DEFAULT_STATE), runtime.DEFAULT_REGISTRY)
-        self.assertEqual(runtime.resolve_registry_path(Path("x.yaml")), Path("x.yaml"))
+    def test_default_registry_is_models_yaml(self):
+        self.assertEqual(runtime.DEFAULT_REGISTRY, Path("models.yaml"))
 
     def test_load_registry_errors(self):
         with self.assertRaises(EngineError):

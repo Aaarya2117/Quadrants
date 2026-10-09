@@ -2,7 +2,8 @@
 
 Any object with the methods below can drive the CLI and the demo. The stub is
 used until the real engine module exists. Once modelswap/real_engine.py defines
-create_engine(state_file), backend "auto" picks it up with no CLI change.
+create_engine(registry_path, audit_dir), backend "auto" picks it up with no
+CLI change.
 
 Integration steps are in docs/INTEGRATION.md.
 """
@@ -32,8 +33,17 @@ class SwapEngine(Protocol):
     def reset(self, role: str) -> RoleStatus: ...
 
 
-def load_engine(backend: str = "auto", state_file: Path | None = None) -> tuple[SwapEngine, str]:
-    """Return (engine, backend_name). backend_name is "real" or "stub"."""
+def load_engine(
+    backend: str = "auto",
+    state_file: Path | None = None,
+    registry: Path | None = None,
+    audit_dir: Path | None = None,
+) -> tuple[SwapEngine, str]:
+    """Return (engine, backend_name). backend_name is "real" or "stub".
+
+    state_file is used by the stub only. registry and audit_dir are used by the
+    real engine only.
+    """
     if backend not in BACKEND_CHOICES:
         raise EngineError(f"unknown backend '{backend}'")
 
@@ -48,6 +58,6 @@ def load_engine(backend: str = "auto", state_file: Path | None = None) -> tuple[
             if backend == "real":
                 raise EngineError(f"--backend real requested but {REAL_MODULE}.py does not exist yet") from exc
         else:
-            return module.create_engine(state_file), "real"
+            return module.create_engine(registry, audit_dir), "real"
 
     return StubEngine(state_file or DEFAULT_STATE_FILE), "stub"

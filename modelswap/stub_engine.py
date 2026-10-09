@@ -1,8 +1,8 @@
-"""Stub engine: deterministic numbers and a JSON state file.
+"""Stub engine: fixed numbers and a JSON state file.
 
-Lets the CLI and the demo run end to end before the real runtime and compare.py
-exist. The metrics are illustrative (they match the 82% -> 94% story in
-ROUND1_SUBMISSION.md); they are not computed from any model.
+Lets the CLI and the demo run without torch or models.yaml. The metrics are the
+measured values from models/README.md, but they are fixed constants here, not
+computed from any model.
 """
 
 from __future__ import annotations
@@ -12,24 +12,24 @@ import os
 from pathlib import Path
 
 from modelswap.results import (
-    DEFAULT_MAX_LATENCY_MS,
     CompareResult,
     EngineError,
     ModelMetrics,
     RoleStatus,
     SwapResult,
+    eligibility,
 )
 
 DEFAULT_STATE_FILE = Path(".modelswap") / "state.json"
 INITIAL_CURRENT = "models/model_a.pt"
 
 # A candidate whose file name contains this marker fails the smoke test.
-# The demo uses it for the "rejected swap" fallback.
 BROKEN_MARKER = "broken"
 
-# File stem -> (accuracy, latency_ms). Illustrative values only.
-STUB_METRICS = {"model_a": (0.82, 1.9), "model_b": (0.94, 2.1)}
-UNKNOWN_METRICS = (0.80, 2.5)
+# File stem -> (test accuracy, p95 latency in ms), from models/README.md and the
+# latest compare run. Unknown models get a low accuracy so they fail the verdict.
+STUB_METRICS = {"model_a": (0.8508, 0.0188), "model_b": (0.9375, 0.0144)}
+UNKNOWN_METRICS = (0.80, 0.0200)
 
 
 class StubEngine:
@@ -63,12 +63,10 @@ class StubEngine:
 
     def compare(self, role: str, candidate: str, data: str | None = None) -> CompareResult:
         current = self.status(role).current
-        return CompareResult(
-            role=role,
-            model_a=_metrics(current),
-            model_b=_metrics(candidate),
-            max_latency_ms=DEFAULT_MAX_LATENCY_MS,
-        )
+        model_a = _metrics(current)
+        model_b = _metrics(candidate)
+        passed, reasons = eligibility(model_a, model_b)
+        return CompareResult(role=role, model_a=model_a, model_b=model_b, eligible=passed, reasons=reasons)
 
     def apply(self, role: str, candidate: str) -> SwapResult:
         data = self._load()

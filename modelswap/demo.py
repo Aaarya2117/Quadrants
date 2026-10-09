@@ -6,12 +6,17 @@ pauses for Enter between steps unless fast=True (rehearsal).
     python -m modelswap demo                 # live, waits for Enter
     python -m modelswap demo --fast          # no pauses
     python -m modelswap demo --show-failure  # also shows a rejected swap
+
+The CLI runs the demo on a temporary copy of the registry and state, so the
+demo never changes models.yaml or swaps/.
 """
 
 from __future__ import annotations
 
 import sys
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable, TextIO
 
 from modelswap.commands import execute
@@ -23,10 +28,13 @@ MATLAB_NOTE = (
     "shift and the stream across the swap at t = 50."
 )
 
+# Not a checkpoint: loading it fails, so the smoke test (or the pre-check) rejects it.
+CORRUPT_CHECKPOINT = b"this is not a PyTorch checkpoint"
+
 
 @dataclass(frozen=True)
 class DemoOptions:
-    role: str = "classifier_role"
+    role: str = "classifier"
     candidate: str = "models/model_b.pt"
     fast: bool = False
     show_failure: bool = False
@@ -41,7 +49,7 @@ class Step:
     after: str | None = None  # text printed after the step, before the pause
 
 
-def build_steps(options: DemoOptions) -> list[Step]:
+def build_steps(options: DemoOptions, corrupt_candidate: str | None = None) -> list[Step]:
     steps = [
         Step("Initial state: Model A serving", "reset"),
         Step("Show the active model", "status"),
@@ -50,14 +58,15 @@ def build_steps(options: DemoOptions) -> list[Step]:
     if options.show_failure:
         steps.append(
             Step(
-                "Try a broken candidate (the smoke test should reject it)",
+                "Try a corrupt candidate (expect rejection: the active model stays)",
                 "apply",
-                candidate=f"models/model_{BROKEN_MARKER}.pt",
+                candidate=corrupt_candidate or f"models/model_{BROKEN_MARKER}.pt",
                 expect_ok=False,
             )
         )
     steps += [
-        Step("Swap: promote Model B", "apply", candidate=options.candidate, after=MATLAB_NOTE),
+        Step("Swap: promote Model B", "apply", candidate=options.candidate,
+             after=MATLAB_NOTE if options.role == "classifier" else None),
         Step("Roll back to Model A", "rollback"),
         Step("Confirm the active model", "status"),
     ]
@@ -70,11 +79,16 @@ def run_demo(
     options: DemoOptions,
     out: TextIO | None = None,
     pause: Callable[[str], None] | None = None,
+    workdir: Path | None = None,
 ) -> int:
     """Run every step. Returns 0 if each step behaved as expected, else 1."""
     out = out or sys.stdout
     pause = pause or _default_pause(options.fast)
-    steps = build_steps(options)
+
+    corrupt_candidate = None
+    if options.show_failure:
+        corrupt_candidate = str(_write_corrupt_candidate(workdir))
+    steps = build_steps(options, corrupt_candidate)
 
     print(f"ML Model Swap demo | role={options.role} | backend={backend}", file=out)
     if backend == "stub":
@@ -104,6 +118,14 @@ def run_demo(
     all_passed = passed_count == len(steps)
     print(f"Result: {'PASS' if all_passed else 'FAIL'} ({passed_count}/{len(steps)} steps)", file=out)
     return 0 if all_passed else 1
+
+
+def _write_corrupt_candidate(workdir: Path | None) -> Path:
+    """Write a corrupt checkpoint file so the rejected-swap step uses a real bad file."""
+    directory = workdir or Path(tempfile.mkdtemp(prefix="modelswap-demo-"))
+    path = Path(directory) / f"model_{BROKEN_MARKER}.pt"
+    path.write_bytes(CORRUPT_CHECKPOINT)
+    return path
 
 
 def _default_pause(fast: bool) -> Callable[[str], None]:

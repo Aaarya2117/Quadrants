@@ -1,89 +1,103 @@
-# Integrating the Real Engine
+# Integration Guide: the engine behind the CLI
 
-The CLI, the demo and the tests run on a stub until the real engine exists. This
-document describes how Arjun's runtime/swap code and Bhagat's comparison code
-plug into the `modelswap` package with no changes to the CLI or demo.
+The CLI, the demo and the tests run on a stub engine unless the real engine
+module is present. This document describes the contract the CLI expects, and
+how the real engine (`modelswap/real_engine.py`) meets it.
+
+The real engine is in place. This guide is for anyone who replaces or extends it.
 
 ## 1. The contract
 
-Anything implementing these five methods can drive the CLI and demo. The
-signatures are in `modelswap/engine.py` (`SwapEngine`), and the return types are in
-`modelswap/results.py`.
+Anything implementing these five methods can drive the CLI and the demo. The
+signatures are in `modelswap/engine.py` (`SwapEngine`), and the result types are
+in `modelswap/results.py`.
 
 | Method | Returns | Used by |
 |---|---|---|
 | `status(role)` | `RoleStatus(role, current, previous)` | `status`, `demo` |
-| `compare(role, candidate, data=None)` | `CompareResult(model_a, model_b, max_latency_ms)` | `compare` |
+| `compare(role, candidate, data=None)` | `CompareResult(model_a, model_b, eligible, reasons, max_latency_ms)` | `compare`, and `apply` (as the gate) |
 | `apply(role, candidate)` | `SwapResult(operation="apply", ok, current, previous, smoke_test_passed, error)` | `apply` |
 | `rollback(role)` | `SwapResult(operation="rollback", ...)` | `rollback` |
 | `reset(role)` | `RoleStatus` | `reset`, `demo` |
 
-Rules the real engine must follow:
-- `apply` with a failing smoke test returns `ok=False`, restores `models.yaml` from the backup, and leaves `current` unchanged. It does not raise.
-- Raise `EngineError` only when the operation cannot run at all (no previous model for rollback, unknown role, candidate equal to the active model).
-- `compare` returns raw numbers. The PASS/FAIL verdict comes from `CompareResult.eligible`, so the policy stays in one place.
-- `reset` restores the initial registry state (Model A as current, no previous). It exists for rehearsal only.
+Rules every engine must follow:
 
-## 2. The one file to add
+- **`compare` returns the verdict, it does not compute it.** Set `eligible` and `reasons` from the comparison's own verdict (`modelswap.compare.verdict`). Don't re-derive them.
+- **`apply` checks before it writes.** Run the architecture check against the current model and the registry entry, then the smoke test. Write only when both pass. A failed check returns `ok=False` and leaves the registry untouched. It doesn't raise.
+- **Raise `EngineError` only when the operation cannot run at all**: no previous model for rollback, unknown role, candidate equal to the active model, candidate file missing.
+- **`reset` restores the start state** (Model A current, no previous). It is for rehearsal only.
 
-Create `modelswap/real_engine.py` with a factory function:
+## 2. Who checks what
+
+| Step | Where it happens | On failure |
+|---|---|---|
+| Verdict gate (apply only) | `commands.execute`, calls `engine.compare` first | Refused with the reasons, unless `--force` |
+| Architecture pre-check | `swap._pointer_change` via `RealEngine.verify` | `ok=False`, `error="pre-check failed: ..."` |
+| Smoke test | `swap._pointer_change` via `modelswap.compare.smoke_test` | `ok=False`, `smoke_test_passed=False` |
+| Atomic write | `swap.write_registry_atomic` (temp file + `os.replace`) | Only reached when both checks pass |
+| Audit record | `swap._audit`, one JSON file per call in `swaps/` | Written for every apply and rollback, pass or fail |
+
+## 3. The real engine
+
+`modelswap/real_engine.py` provides:
 
 ```python
-from pathlib import Path
-
-from modelswap.results import CompareResult, RoleStatus, SwapResult
-
-
-class RealEngine:
-    def __init__(self, registry_path: Path):
-        ...  # load models.yaml, set up backups and swaps/ audit dir
-
-    def status(self, role: str) -> RoleStatus: ...
-    def compare(self, role: str, candidate: str, data: str | None = None) -> CompareResult: ...
-    def apply(self, role: str, candidate: str) -> SwapResult: ...
-    def rollback(self, role: str) -> SwapResult: ...
-    def reset(self, role: str) -> RoleStatus: ...
-
-
-def create_engine(state_file: Path | None) -> RealEngine:
-    # state_file is the --state-file option; use it for models.yaml, or
-    # return RealEngine(Path("models.yaml")) if the registry path is fixed.
-    return RealEngine(state_file or Path("models.yaml"))
+def create_engine(registry_path: Path | None = None, audit_dir: Path | None = None) -> RealEngine
 ```
 
-Then `load_engine` picks it up automatically:
+`RealEngine` takes the registry path, the audit directory, and two optional
+hooks: `smoke_test` and `verify`. The hooks default to the real checks; tests
+pass fakes.
 
-- `--backend auto` (default) uses `RealEngine` once the file exists.
+Backend selection is in `modelswap/engine.py`:
+
+- `--backend auto` (default) uses `RealEngine` when `modelswap/real_engine.py` exists.
 - `--backend real` requires it and reports an error if it is missing.
 - `--backend stub` always uses the stub.
 
-If `real_engine.py` imports a package that is not installed (torch, for example), the CLI reports `missing dependency 'torch'`. It does not silently fall back to the stub.
+If `real_engine.py` imports a package that is not installed (torch, for example),
+the CLI reports `missing dependency 'torch'`. It does not silently fall back to
+the stub.
 
-## 3. Mapping the team's modules
+## 4. Options
 
-| Real module (owner) | Used by `RealEngine` for |
+| Option | Used by | Meaning |
+|---|---|---|
+| `--registry PATH` | real engine | Path to `models.yaml` (default `models.yaml`) |
+| `--state-file PATH` | stub engine | Path to the stub's JSON state (default `.modelswap/state.json`) |
+| `--backend` | all | `auto`, `stub` or `real` |
+| `--force` (apply) | verdict gate | Apply even when the verdict is FAIL |
+
+The demo always runs on a temporary copy of the registry and state, so it never
+changes the project's `models.yaml` or `swaps/`.
+
+## 5. Module ownership
+
+| Module | Responsibility |
 |---|---|
-| `modelswap/runtime.py` (Arjun): `load_registry`, `get(role)` | `status`, and loading models for `compare` |
-| `modelswap/swap.py` (Arjun): atomic apply, backup, rollback, smoke test | `apply`, `rollback`, `reset` |
-| `compare.py` (Bhagat): accuracy, F1, latency | `compare` |
+| `modelswap/runtime.py` | Reads `models.yaml`, resolves role aliases, reports status and thresholds |
+| `modelswap/swap.py` | Pre-check, smoke test, atomic registry write, rollback, reset, audit |
+| `modelswap/compare.py` | Evaluation, architecture signature check, smoke test, verdict (Bhagat's) |
+| `modelswap/arch.py` | Checkpoint format and loading (Bhagat's) |
+| `modelswap/real_engine.py` | Glues the above into the contract |
 
-Arjun and Bhagat keep their own file layout. `RealEngine` is the only place
-that knows about them.
+## 6. Verification
 
-## 4. Verification after integration
+Run these from the project root after any change to the engine:
 
-1. `python -m unittest discover -s tests -t .` still passes. The tests cover the stub and the backend selection. Add a contract test for `RealEngine` (see step 5).
-2. `python -m modelswap --backend real reset` runs without error.
-3. `python -m modelswap --backend real compare --candidate models/model_b.pt` shows real metrics, not 82% / 94%.
-4. `python -m modelswap --backend real demo --fast --show-failure` ends with `Result: PASS (7/7 steps)` and the banner says `backend=real`.
-5. Add a contract test: run the same operations against `RealEngine` (using a temporary registry and tiny test models) and check the result types and the `ok`/`error` rules listed above.
+1. `python -m pytest`: all tests pass.
+2. `python -m modelswap --backend real status`: shows the registry's current model.
+3. `python -m modelswap --backend real compare --candidate models/model_b.pt`: shows the real numbers (about 85.1% vs 93.8%) and PASS.
+4. `python -m modelswap --backend real apply --candidate <a model that fails the verdict>`: refused, with the reasons printed. Add `--force` only to confirm the override works.
+5. `python -m modelswap --backend real demo --fast --show-failure`: ends with `Result: PASS (7/7 steps)`, and the banner says `backend=real`.
+6. Confirm `git status` shows no change to `models.yaml` after the demo.
 
-## 5. Checklist for the integrator
+## 7. Checklist for changes to the engine
 
-- [ ] `modelswap/real_engine.py` defines `create_engine(state_file)` and a class that satisfies `SwapEngine`.
-- [ ] `apply` returns `ok=False` on smoke-test failure and leaves `models.yaml` unchanged.
+- [ ] `compare` takes `eligible` and `reasons` from the comparison verdict.
+- [ ] `apply` runs the architecture pre-check and the smoke test before writing.
+- [ ] A failed check leaves `models.yaml` byte-for-byte unchanged.
 - [ ] `rollback` raises `EngineError` when there is no previous model.
-- [ ] `compare` returns real numbers; `eligible` is not reimplemented.
 - [ ] `reset` restores Model A.
-- [ ] `docs/DEMO_RUNBOOK.md` commands work against the real engine.
-- [ ] The banner in `demo` shows `backend=real`.
+- [ ] Every apply and rollback writes an audit record.
+- [ ] The steps in section 6 pass.

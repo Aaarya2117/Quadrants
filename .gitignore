@@ -14,3 +14,7 @@ Thumbs.db
 
 # Registry backup written by swap/rollback
 *.bak
+
+# Audit records written by the real engine
+swaps/
+models/text/*.pt

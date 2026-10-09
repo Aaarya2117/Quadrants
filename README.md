@@ -18,17 +18,17 @@ Compare two machine learning models sharing the exact same architecture (e.g., M
 
 ### 1. Application calls a role, not hardcoded files
 ```python
-from modelswap import get
+from modelswap.runtime import get
 
 # App queries the active model dynamically
-model = get("fraud_classifier")
+model = get("classifier")
 prediction = model.predict(features)
 ```
 
 ### 2. Registry (`models.yaml`)
 ```yaml
 roles:
-  fraud_classifier:
+  classifier:
     architecture: mlp_classifier_v1
     input_dim: 10
     output_dim: 2
@@ -45,19 +45,19 @@ roles:
 
 ### Step 1: Run the Comparison
 ```bash
-python -m modelswap compare --role fraud_classifier --candidate models/model_b.pt --data data/test.csv
+python -m modelswap compare --role classifier --candidate models/model_b.pt
 ```
 Compares Model A vs Model B on accuracy, loss, and latency.
 
 ### Step 2: Apply the Swap
 ```bash
-python -m modelswap apply --role fraud_classifier --candidate models/model_b.pt
+python -m modelswap apply --role classifier --candidate models/model_b.pt
 ```
 Atomically updates `models.yaml`, runs a smoke test, and creates an audit record.
 
 ### Step 3: Instant Rollback
 ```bash
-python -m modelswap rollback --role fraud_classifier
+python -m modelswap rollback --role classifier
 ```
 Restores Model A immediately if issues occur.
 

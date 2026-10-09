@@ -37,7 +37,7 @@ class LoadEngineTests(unittest.TestCase):
             engine, backend = load_engine("auto", state_file=None)
         self.assertEqual(backend, "real")
         self.assertIs(engine, sentinel)
-        fake.create_engine.assert_called_once_with(None)
+        fake.create_engine.assert_called_once_with(None, None)
 
     def test_unknown_backend_raises(self):
         with self.assertRaises(EngineError):

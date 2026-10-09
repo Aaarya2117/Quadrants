@@ -26,6 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from modelswap.arch import MLP, load_checkpoint, architecture_signature
 
+# Used when models.yaml does not set thresholds for a role. models.yaml is the source of truth.
+DEFAULT_THRESHOLDS = {"min_accuracy": 0.85, "max_latency_ms": 5.0}
+
 def set_deterministic_threads() -> None:
     """
     Set PyTorch intra-op parallelism to 1 thread for stable, jitter-free
@@ -233,8 +236,8 @@ def verdict(result: dict[str, Any], thresholds: dict[str, Any]) -> tuple[str, li
         mismatches = result.get("architecture_mismatches", ["Architecture mismatch"])
         return "FAIL", [f"Architecture check failed: {', '.join(mismatches)}"]
 
-    min_accuracy = float(thresholds.get("min_accuracy", 0.85))
-    max_latency_ms = float(thresholds.get("max_latency_ms", 5.0))
+    min_accuracy = float(thresholds.get("min_accuracy", DEFAULT_THRESHOLDS["min_accuracy"]))
+    max_latency_ms = float(thresholds.get("max_latency_ms", DEFAULT_THRESHOLDS["max_latency_ms"]))
 
     acc_a = result["current"]["accuracy"]
     acc_b = result["candidate"]["accuracy"]
@@ -283,14 +286,19 @@ def compare(
     role_or_paths: str | tuple[str | Path, str | Path] | list[str | Path],
     data_path: str | Path = "data/test.npz",
     models_yaml: str | Path = "models.yaml",
-    n_latency_runs: int = 200
+    n_latency_runs: int = 200,
+    registry_entry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Main comparison entrypoint. Resolves model paths from role or arguments,
     verifies architecture, evaluates both models, and computes paired agreement.
+
+    Pass registry_entry (the role's dict from models.yaml) to skip the path-based
+    lookup in tuple mode.
     """
-    registry_entry = None
-    thresholds = {"min_accuracy": 0.85, "max_latency_ms": 5.0}
+    thresholds = dict(DEFAULT_THRESHOLDS)
+    if registry_entry is not None:
+        thresholds.update(registry_entry.get("thresholds") or {})
 
     yaml_file = Path(models_yaml)
     if isinstance(role_or_paths, str) and not Path(role_or_paths).exists():
@@ -310,7 +318,7 @@ def compare(
             thresholds.update(registry_entry["thresholds"])
     elif isinstance(role_or_paths, (tuple, list)) and len(role_or_paths) == 2:
         path_a, path_b = role_or_paths
-        if yaml_file.exists():
+        if registry_entry is None and yaml_file.exists():
             with open(yaml_file, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f)
                 roles = cfg.get("roles", {})

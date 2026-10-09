@@ -27,10 +27,10 @@ Slide-deck outline (7 slides). Build it in PowerPoint or Google Slides with the 
 
 **Slide 4: live demo (1:15)**
 Switch to the terminal and run `python -m modelswap demo` (with `--show-failure` if time allows).
-- "We start on Model A, at 82% accuracy." (step 1–2)
+- "We start on Model A, at 85% accuracy." (step 1–2)
 - "Now compare: Model B reaches 94%, same input and output shapes, within our latency budget. Verdict: PASS." (step 3)
-- "We try a broken candidate. The smoke test rejects it, and the active model stays A." (step 4, optional)
-- "Apply promotes Model B. Watch the time: it's the pointer switch and the smoke test, well under 50 milliseconds." (step 5)
+- "We try a corrupt candidate. The checks refuse it, and the active model stays A." (step 4, optional)
+- "Apply runs the verdict again, checks the architecture, runs the smoke test, and only then switches the pointer. The switch itself takes a few milliseconds." (step 5)
 - Switch to MATLAB when the demo asks.
 
 **Slide 5: MATLAB (0:30)**
@@ -52,3 +52,10 @@ Switch back, press Enter.
 - Rehearse once with `python -m modelswap demo --fast` to check the timing, then once at full pace.
 - If the demo breaks on stage, switch to the backup video (see `docs/DEMO_RUNBOOK.md`, section 6).
 - Don't claim numbers the demo didn't show. If the real engine isn't wired in, say that the demo shows the stub's illustrative numbers.
+
+## Questions to expect (have these ready)
+
+- **"Isn't the baseline a strawman?"** Yes, on purpose. Model A was trained on 250 of the 3,600 training samples for 15 epochs (see `models/README.md`). The point of the demo is the swap, so the baseline is deliberately modest. Say so.
+- **"Is 93.75% vs 85.08% significant?"** On the 1,200-sample test set the two models disagree on 130 points: B is right on 117 and A on 13. A McNemar test gives chi-squared of about 81.6 (1 degree of freedom), so p < 0.001.
+- **"Is the new model faster?"** No claim. The p50 latency difference is about -0.0001 ms, which is noise. Say "no latency regression", not "faster".
+- **"What does the rollback time include?"** The CLI starts a new process each time, so the first call loads PyTorch inside the timed step. The pointer switch itself is a few milliseconds. The 50 ms target is for the switch in a running service.

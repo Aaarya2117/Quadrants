@@ -32,7 +32,7 @@ Application code queries a logical **role** (`get("classifier")`) rather than a 
 ---
 
 ## 4. Live Demo Flow
-1. **Initial State:** Application runs inference with Model A (Baseline, e.g., 82% accuracy).
+1. **Initial State:** Application runs inference with Model A (Baseline, 85.08% test accuracy).
 2. **Comparison:** Run `modelswap compare` to show Model B achieves 94% accuracy with identical input/output shapes.
 3. **Swap Execution:** Run `modelswap apply` to switch the pointer to Model B in `models.yaml`.
 4. **MATLAB Visualizer:** Open `simulate_swap.m` to display:

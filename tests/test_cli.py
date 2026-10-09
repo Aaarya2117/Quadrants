@@ -35,7 +35,7 @@ class CliTests(unittest.TestCase):
         code, text = self.run_cli("compare", "--candidate", CANDIDATE)
         self.assertEqual(code, 0)
         self.assertIn("Verdict: PASS", text)
-        self.assertIn("+12.0 pts", text)
+        self.assertIn("+8.7 pts", text)
 
     def test_apply_then_status_shows_candidate(self):
         code, text = self.run_cli("apply", "--candidate", CANDIDATE)
@@ -59,11 +59,26 @@ class CliTests(unittest.TestCase):
         self.assertIn("[FAIL] rollback", text)
         self.assertIn("nothing to roll back to", text)
 
-    def test_broken_candidate_fails_and_keeps_active_model(self):
+    def test_broken_candidate_is_refused_by_verdict_without_force(self):
         code, text = self.run_cli("apply", "--candidate", "models/model_broken.pt")
+        self.assertEqual(code, 1)
+        self.assertIn("apply refused", text)
+        _, status_text = self.run_cli("status")
+        self.assertIn("Current:  models/model_a.pt", status_text)
+
+    def test_broken_candidate_fails_smoke_test_with_force(self):
+        code, text = self.run_cli("apply", "--candidate", "models/model_broken.pt", "--force")
         self.assertEqual(code, 1)
         self.assertIn("[FAIL] apply rejected", text)
         self.assertIn("Active model unchanged: models/model_a.pt", text)
+
+    def test_candidate_failing_verdict_is_refused_unless_forced(self):
+        code, text = self.run_cli("apply", "--candidate", "models/model_c.pt")
+        self.assertEqual(code, 1)
+        self.assertIn("apply refused", text)
+        code, text = self.run_cli("apply", "--candidate", "models/model_c.pt", "--force")
+        self.assertEqual(code, 0)
+        self.assertIn("[OK] apply", text)
 
     def test_apply_same_model_fails(self):
         code, text = self.run_cli("apply", "--candidate", "models/model_a.pt")
