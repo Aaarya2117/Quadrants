@@ -14,6 +14,8 @@ The ML subsystem for ML Model Swap provides:
 2. A deterministic, reproducible synthetic 2D classification dataset based on 4-quadrant / XOR geometry, saved for Python training and exported for MATLAB simulation.
 3. An evaluation and comparison engine (`modelswap/compare.py`) that executes side-by-side benchmarking of accuracy, loss, and latency, returning a structured verdict (`PASS` / `FAIL`) usable both programmatically and via CLI.
 
+*Production Architecture Framing:* While the 3-hour sprint live demo and MATLAB visualizer operate on the 2D MLP geometry for rapid iteration, instant loading, and transparent 2D boundary rendering, the design, docs, and pitch explicitly highlight extensibility to large production models (such as BERT vs ELECTRA classification heads).
+
 All random seeds are strictly fixed (`seed=42`). Every printed or returned metric is dynamically computed at runtime.
 
 ---
