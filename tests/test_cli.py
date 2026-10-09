@@ -1,10 +1,13 @@
 import contextlib
 import io
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from modelswap.cli import main
+from modelswap.engine import REAL_MODULE
 
 CANDIDATE = "models/model_b.pt"
 
@@ -81,7 +84,8 @@ class CliTests(unittest.TestCase):
 
     def test_real_backend_missing_reports_failure(self):
         out = io.StringIO()
-        code = main(["--backend", "real", "--state-file", self.state, "status"], out=out)
+        with mock.patch.dict(sys.modules, {REAL_MODULE: None}):
+            code = main(["--backend", "real", "--state-file", self.state, "status"], out=out)
         self.assertEqual(code, 1)
         self.assertIn("does not exist yet", out.getvalue())
 
