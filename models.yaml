@@ -1,0 +1,11 @@
+roles:
+  classifier:
+    architecture: mlp_2layer
+    input_dim: 2
+    output_dim: 2
+    current: "models/model_a.pt"
+    previous: "models/model_a.pt"
+    candidate: "models/model_b.pt"
+    thresholds:
+      min_accuracy: 0.85
+      max_latency_ms: 5.0

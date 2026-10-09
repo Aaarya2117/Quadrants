@@ -1,0 +1,12 @@
+{
+  "mean": [
+    0.48626594972823917,
+    0.2599740725432623
+  ],
+  "std": [
+    0.8937826275097152,
+    0.5522902656465402
+  ],
+  "is_already_scaled": true,
+  "note": "Features in train.csv, val.csv, test.csv and *.npz are ALREADY standardized using these train statistics. Do NOT re-scale them."
+}

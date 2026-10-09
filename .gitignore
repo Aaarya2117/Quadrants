@@ -1,0 +1,13 @@
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Local swap state (stub engine) and atomic-write temp files
+.modelswap/
+*.tmp
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db

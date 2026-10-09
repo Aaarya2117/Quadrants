@@ -1,0 +1,49 @@
+{
+  "current_path": "models/model_a.pt",
+  "candidate_path": "models/model_b.pt",
+  "architecture_ok": true,
+  "architecture_mismatches": [],
+  "current": {
+    "accuracy": 0.8508333333333333,
+    "loss": 0.333034485578537,
+    "latency_p50_ms": 0.013799999578623101,
+    "latency_p95_ms": 0.018804999490384944,
+    "latency_mean_ms": 0.016834500011100317,
+    "throughput_samples_per_sec": 32885722.031670883
+  },
+  "candidate": {
+    "accuracy": 0.9375,
+    "loss": 0.1783476173877716,
+    "latency_p50_ms": 0.013700000636163168,
+    "latency_p95_ms": 0.014410000494535776,
+    "latency_mean_ms": 0.013971500020488747,
+    "throughput_samples_per_sec": 26619343.378865056
+  },
+  "deltas": {
+    "accuracy": 0.08666666666666667,
+    "loss": -0.15468686819076538,
+    "latency_p50_ms": -9.999894245993346e-05,
+    "latency_p95_ms": -0.004394998995849168,
+    "latency_mean_ms": -0.00286299999061157,
+    "throughput_samples_per_sec": -6266378.652805828
+  },
+  "paired_agreement": {
+    "differ_count": 130,
+    "differ_ratio": 0.10833333333333334,
+    "candidate_correct_current_wrong": 117,
+    "current_correct_candidate_wrong": 13,
+    "net_gain_samples": 104,
+    "both_correct": 1008,
+    "both_wrong": 62
+  },
+  "thresholds": {
+    "min_accuracy": 0.85,
+    "max_latency_ms": 5.0
+  },
+  "verdict": "PASS",
+  "verdict_reasons": [
+    "Candidate accuracy (93.75%) improved on current accuracy (85.08%) by +8.67%.",
+    "Candidate accuracy (93.75%) meets minimum threshold (85.00%).",
+    "Candidate p95 latency (0.0144ms) is within threshold (5.0000ms)."
+  ]
+}
