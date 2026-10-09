@@ -1,71 +1,41 @@
-# Model Swap: Team Assignments
+# ML Model Swap: 3-Hour Team Assignments & Sprint Schedule
 
-**Team:** Arjun, Bhagat, Achyut, Anirudh
-**Reference:** the detailed hour plan is in `WORK_DIVISION.md`. This sheet covers ownership and handoffs for the revised scope.
+**Team Members:** Arjun, Bhagat, Achyut, Anirudh  
+**Sprint Window:** 3 Hours (180 Minutes)  
+**Objective:** Live demo of swapping two ML models with identical architecture + interactive MATLAB simulation.
 
-## 1. Owners
+---
 
-| Member | Role | Owns | Main deliverables |
-|--------|------|------|-------------------|
-| **Arjun** | Runtime and Swap Engine | `runtime/`, `swap/`, `source/`, `cli.py` | `models.yaml` registry, `get(role)`, Ollama and OpenAI-compatible backends, registry apply and rollback, atomic writes, source scanner and editor, audit records |
-| **Bhagat** | Suites and Comparison | `suite/`, `compare/`, `contracts/`, demo project | Recorded suite format and importer, PII masking, contract checker, async replay runner with caching, graders, demo project with three roles and a seeded bad candidate |
-| **Achyut** | Statistics and Options | `options/`, `policy/` (in `compare/stats.py` with Bhagat's runner interface) | Paired statistics (McNemar, bootstrap), cost and latency metrics, risk rules in `policy.yaml`, option builder, weight digest verification |
-| **Anirudh** | Reports, CI, and Demo | `report/`, `ci/action/`, demo repository, presentation | Markdown and HTML reports, options page, GitHub Action (comparison comment and manual apply dispatch), README and pitch, Gemma 4 multimodal role |
+## 1. Member Ownership & Deliverables
 
-Basis for these roles: Arjun takes the swap engine because it is the most safety-critical part and needs the tightest control over file writes. Bhagat owns the data and contract side, since every decision depends on it. If a member's strengths point elsewhere, swap roles in the first hour and keep the folder ownership with whoever takes each role.
+| Member | Focus Area | Core 3-Hour Deliverables |
+|---|---|---|
+| **Arjun** | **Runtime & Swap Engine** | `models.yaml` registry, `get(role)` dynamic loader, atomic apply (`swap.py`), smoke test runner, and instant rollback. |
+| **Bhagat** | **ML Models & Comparison** | Train/export two identical-architecture ML models (`model_a.pt` vs `model_b.pt`), synthetic validation dataset, and evaluation metrics in `compare.py`. |
+| **Achyut** | **MATLAB Simulation** | Interactive `matlab/simulate_swap.m`: 2D decision boundary visualization, weight delta matrix heatmap ($\Delta W$), and live data stream simulation. |
+| **Anirudh** | **CLI & Demo Orchestration** | CLI interface (`cli.py`), end-to-end demo workflow scripting, slide/pitch deck, and screen recording backup. |
 
-## 2. Ownership Rules
+---
 
-- Edit only the folders you own. For a change elsewhere, open a short pull request and tag the owner.
-- `contracts.py` (shared types: `ModelRef`, `Response`, `Contract`, `ChangeSet`, `Option`) is agreed in Hours 0–1 by all four. After Hour 1, changes need all four to approve.
-- Arjun reviews any change to `swap/`. Achyut reviews any change to risk logic in `options/` and `policy.yaml`.
-- No one merges changes to `source/editor.py` without a test that checks the drift guard.
+## 2. 3-Hour Execution Timeline
 
-## 3. First Actions (Hours 0–1)
+### Hour 1: Foundation (0:00 – 1:00)
+- **Arjun:** Create `models.yaml` structure and write `modelswap/runtime.py` with `get(role)`.
+- **Bhagat:** Generate synthetic 2D classification dataset; train Model A (baseline) and Model B (improved) using the same 2-layer MLP architecture.
+- **Achyut:** Set up MATLAB workspace and write the decision boundary plotting function.
+- **Anirudh:** Initialize repository CLI harness (`modelswap compare/apply/rollback`) and draft 3-minute pitch outline.
 
-| Member | First task |
-|--------|-----------|
-| Arjun | Create the repository and license; write `models.yaml` schema and the `get(role)` loader |
-| Bhagat | Write 15 seed cases for the invoice role and the `invoice_extractor` contract |
-| Achyut | Write the risk rules and the `policy.yaml` format; define option types |
-| Anirudh | Set up the report template and the PR comment layout; choose the Gemma 4 model tag |
-| All | Agree the shared types in `contracts.py` before writing logic |
+### Hour 2: Implementation & Visualization (1:00 – 2:00)
+- **Arjun:** Implement atomic apply (`models.yaml` update + backup) and `rollback` command with smoke testing.
+- **Bhagat:** Wire `compare.py` to evaluate both models side-by-side on accuracy and latency.
+- **Achyut:** Finalize `simulate_swap.m` with live streaming plot showing inference before and after the swap event.
+- **Anirudh:** Connect CLI commands to the runtime and comparison engine.
 
-## 4. Handoffs
-
-| From | To | Handoff | Needed by |
-|------|----|---------|-----------|
-| Arjun | Bhagat | Working `get(role)` returning a client that calls Ollama | Hour 6 |
-| Bhagat | Achyut | Paired case results with contract and grading outcomes | Hour 14 |
-| Achyut | Anirudh | Comparison summary with options and risk levels | Hour 22 |
-| Arjun | Anirudh | Audit record format and apply output | Hour 30 |
-| Arjun | Bhagat | Apply and rollback working on the demo project | Hour 30 |
-| Bhagat | Arjun | Demo project with the seeded bad candidate for end-to-end tests | Hour 36 |
-
-## 5. Checkpoints
-
-| Checkpoint | Time | Owner who reports | What must work |
-|------------|------|------------------|----------------|
-| CP1 | Hour 6 | Arjun | `get("role")` calls the model; `models.yaml` loads |
-| CP2 | Hour 14 | Bhagat | Comparison on 15 cases produces paired results and a contract verdict |
-| CP3 | Hour 22 | Achyut | Options list shows risk; bad candidate is "keep current" |
-| CP4 | Hour 30 | Arjun | Apply on the registry path passes smoke test; rollback restores the file byte-for-byte |
-| CP5 | Hour 38 | Arjun and Anirudh | Source path applies on the demo project; PR comment posts from the action |
-| CP6 | Hour 44 | All | Full cycle on the demo passes twice; feature freeze |
-
-If a checkpoint slips by more than 4 hours, cut in this order: staged option (already out of scope), source path (keep registry path only, and state it in the demo), HTML report (keep Markdown), the OpenAI-compatible backend (keep Ollama). Do not cut contract checks, the smoke test, rollback, or the audit record.
-
-## 6. Daily Syncs
-
-- Hours 0, 12, 24, 36, and 44: a 10-minute standup. Each member gives: done, blocked, next.
-- Blocked items go to the owner of the blocking folder within 15 minutes.
-
-## 7. Final-Day Responsibilities
-
-| Member | Hours 44–48 |
-|--------|-------------|
-| Arjun | Install test on a clean machine; confirm the rollback test passes; tag the release |
-| Bhagat | Document the suite format and the privacy masking; check the demo data is synthetic |
-| Achyut | One-page explanation of the options and risk rules for judges |
-| Anirudh | Finalize README, architecture diagram, demo backup video, and PR comment screenshots |
-| All | Bug fixes only; pitch rehearsal; Q&A preparation |
+### Hour 3: Integration & Demo Rehearsal (2:00 – 3:00)
+- **All:** Run complete end-to-end cycle:
+  1. Show app running with Model A.
+  2. Run `modelswap compare` (Model B shows higher accuracy).
+  3. Run `modelswap apply` (atomic switch to Model B, smoke test passes).
+  4. Run MATLAB visualizer demonstrating real-time shift in decision boundary and stream stability.
+  5. Run `modelswap rollback` (verifying instant revert to Model A).
+- **Anirudh & Arjun:** Rehearse live presentation and record backup video.
