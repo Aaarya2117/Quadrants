@@ -1,41 +1,41 @@
-# ML Model Swap: 3-Hour Team Assignments & Sprint Schedule
+# ML Model Swap: Team Assignments & Sprint Schedule
 
 **Team Members:** Arjun, Bhagat, Achyut, Anirudh  
 **Sprint Window:** 3 Hours (180 Minutes)  
-**Objective:** Live demo of swapping two ML models with identical architecture + interactive MATLAB simulation.
+**Objective:** End-to-end delivery of the open-source `modelswap` CLI tool and runtime library for safe, zero-downtime model swapping.
 
 ---
 
 ## 1. Member Ownership & Deliverables
 
-| Member | Focus Area | Core 3-Hour Deliverables |
+| Member | Focus Area | Core Deliverables |
 |---|---|---|
 | **Arjun** | **Runtime & Swap Engine** | `models.yaml` registry, `get(role)` dynamic loader, atomic apply (`swap.py`), smoke test runner, and instant rollback. |
-| **Bhagat** | **ML Models & Comparison** | Train/export two identical-architecture ML models (`model_a.pt` vs `model_b.pt`), synthetic validation dataset, and evaluation metrics in `compare.py`. |
-| **Achyut** | **MATLAB Simulation** | Interactive `matlab/simulate_swap.m`: 2D decision boundary visualization, weight delta matrix heatmap ($\Delta W$), and live data stream simulation. |
-| **Anirudh** | **CLI & Demo Orchestration** | CLI interface (`cli.py`), end-to-end demo workflow scripting, slide/pitch deck, and screen recording backup. |
+| **Bhagat** | **ML Models & Comparison** | Train/export identical-architecture ML models (`model_a.pt` vs `model_b.pt`), fine-tune transformer models (`bert-base-uncased` vs `roberta-base`), and evaluation engine in `compare.py`. |
+| **Achyut** | **Weight Divergence & Audit** | Weight divergence engine (`weights.py`), Frobenius norm calculations ($\Delta W$), parameter hashing, and audit log generation in `swaps/`. |
+| **Anirudh** | **CLI & Interactive Console** | Interactive CLI interface (`cli.py`), interactive selection menu, walkthrough scripting (`demo.py`), and documentation. |
 
 ---
 
-## 2. 3-Hour Execution Timeline
+## 2. Execution Timeline
 
-### Hour 1: Foundation (0:00 – 1:00)
+### Phase 1: Foundation
 - **Arjun:** Create `models.yaml` structure and write `modelswap/runtime.py` with `get(role)`.
-- **Bhagat:** Generate synthetic 2D classification dataset; train Model A (baseline) and Model B (improved) using the same 2-layer MLP architecture.
-- **Achyut:** Set up MATLAB workspace and write the decision boundary plotting function.
-- **Anirudh:** Initialize repository CLI harness (`modelswap compare/apply/rollback`) and draft 3-minute pitch outline.
+- **Bhagat:** Generate synthetic 2D dataset; train Model A (baseline) and Model B (challenger) using 2-layer MLP architecture.
+- **Achyut:** Design weight diffing and Frobenius parameter distance metrics ($\Delta W$).
+- **Anirudh:** Initialize repository CLI harness (`status`, `compare`, `apply`, `rollback`).
 
-### Hour 2: Implementation & Visualization (1:00 – 2:00)
+### Phase 2: Implementation & Safety
 - **Arjun:** Implement atomic apply (`models.yaml` update + backup) and `rollback` command with smoke testing.
-- **Bhagat:** Wire `compare.py` to evaluate both models side-by-side on accuracy and latency.
-- **Achyut:** Finalize `simulate_swap.m` with live streaming plot showing inference before and after the swap event.
+- **Bhagat:** Wire `compare.py` to evaluate models side-by-side on accuracy, loss, and latency; fine-tune NLP models.
+- **Achyut:** Connect weight analysis and SHA256 parameter hashing to `apply` and `rollback` steps.
 - **Anirudh:** Connect CLI commands to the runtime and comparison engine.
 
-### Hour 3: Integration & Demo Rehearsal (2:00 – 3:00)
-- **All:** Run complete end-to-end cycle:
-  1. Show app running with Model A.
-  2. Run `modelswap compare` (Model B shows higher accuracy).
-  3. Run `modelswap apply` (atomic switch to Model B, smoke test passes).
-  4. Run MATLAB visualizer demonstrating real-time shift in decision boundary and stream stability.
-  5. Run `modelswap rollback` (verifying instant revert to Model A).
-- **Anirudh & Arjun:** Rehearse live presentation and record backup video.
+### Phase 3: Integration & Interactive Demo Console
+- **All:** Integrate interactive CLI demo menu (`python -m modelswap --backend real demo`).
+- Verify complete cycle:
+  1. Show active model (`status`).
+  2. Run `compare` (candidate shows higher accuracy and passes gate).
+  3. Run `apply` (atomic switch, smoke test passes, $\Delta W$ reported).
+  4. Run `rollback` (instant revert to baseline).
+  5. Validate 105+ test suite passes in pytest.

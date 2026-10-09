@@ -26,11 +26,6 @@ from modelswap.engine import SwapEngine
 from modelswap.runtime import DEFAULT_REGISTRY
 from modelswap.stub_engine import BROKEN_MARKER
 
-MATLAB_NOTE = (
-    "MATLAB: open matlab/simulate_swap.m and run it to show the decision boundary "
-    "shift and the stream across the swap at t = 50."
-)
-
 # Not a checkpoint: loading it fails, so the smoke test (or the pre-check) rejects it.
 CORRUPT_CHECKPOINT = b"this is not a PyTorch checkpoint"
 
@@ -68,8 +63,7 @@ def build_steps(options: DemoOptions, corrupt_candidate: str | None = None) -> l
             )
         )
     steps += [
-        Step("Swap: promote Model B", "apply", candidate=options.candidate,
-             after=MATLAB_NOTE if options.role == "classifier" else None),
+        Step("Swap: promote Model B", "apply", candidate=options.candidate),
         Step("Roll back to Model A", "rollback"),
         Step("Confirm the active model", "status"),
     ]

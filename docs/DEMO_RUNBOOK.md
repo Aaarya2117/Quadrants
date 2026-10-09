@@ -32,15 +32,14 @@ Options:
 
 ## 3. The live demo, step by step
 
-Run `python -m modelswap demo`. The steps are:
+Run `python -m modelswap demo` (or `python -m modelswap --backend real demo`). The steps are:
 
-1. Initial state: Model A serving.
-2. Show the active model.
-3. Compare A vs B on the test set: Model A 85.1%, Model B 93.8%, verdict PASS.
-4. (Only with `--show-failure`) Try a corrupt candidate. The compare step can't load it, so apply is refused and the active model stays A.
-5. Swap: promote Model B. The output shows the swap time. The demo then prints the MATLAB instruction and waits. Switch to MATLAB, run `matlab/simulate_swap.m` (Achyut's file), then come back and press Enter.
-6. Roll back to Model A.
-7. Confirm the active model.
+1. Interactive Console Menu: Select model pair (`[1]` classifier MLP, `[2]` sentiment BERT/RoBERTa, `[3]` custom files).
+2. Show the active model (`status`).
+3. Compare A vs B on the validation set: Model A 85.1%, Model B 93.8%, delta accuracy +8.7%, verdict PASS.
+4. Swap: promote Model B. Output shows swap time (<10ms), smoke test PASS, and Weight divergence block (Frobenius norm, tensor delta).
+5. Roll back to Model A in one command.
+6. Confirm the active model.
 
 **The demo does not change the real files.** It copies `models.yaml` to a temporary folder and runs everything there. So `models.yaml` and `swaps/` in the project stay as they are, and you don't need `reset` before each run. The real `models.yaml` is only changed by the manual `apply`, `rollback` and `reset` commands.
 
@@ -48,25 +47,24 @@ The stub backend (`--backend stub`) runs the same steps with fixed numbers. Its 
 
 ## 4. Rehearsal checklist
 
-- [ ] `python -m pytest` passes.
-- [ ] `python -m modelswap --backend real demo --fast --show-failure` ends with `Result: PASS (7/7 steps)`, and the banner says `backend=real`.
-- [ ] Full live run (no `--fast`) done at least twice, timed.
-- [ ] Terminal font is large, the window is clean, and the MATLAB window is open on `simulate_swap.m`.
-- [ ] If you ran manual `apply` or `rollback` during setup, run `python -m modelswap reset` so the demo starts from the state you expect. (The demo itself starts from its copy either way.)
+- [ ] `python -m pytest` passes (105+ tests).
+- [ ] `python -m modelswap --backend real demo --auto --fast --show-failure` ends with `Result: PASS (7/7 steps)`.
+- [ ] Interactive demo (`python -m modelswap --backend real demo`) tested with menu navigation.
+- [ ] Terminal font is large, the window is clean.
+- [ ] If you ran manual `apply` or `rollback` during setup, run `python -m modelswap reset` so the demo starts from the state you expect.
 
 ## 5. Recording the backup video
 
 1. Start the screen recorder (Windows: `Win + Alt + R` in Xbox Game Bar, or OBS).
-2. Run `python -m modelswap demo` and press Enter at each pause. Pause briefly at the MATLAB step.
-3. Stop the recording. Save it outside the repo, or in `docs/` if the team wants it versioned.
+2. Run `python -m modelswap --backend real demo` and navigate through the interactive menu.
+3. Stop the recording.
 
 ## 6. Fallbacks
 
 | If this fails | Do this |
 |---|---|
-| MATLAB does not open | Show the saved PNG of the decision boundaries and the stream plot (ask Achyut for a screenshot). |
 | `apply` is refused on stage | This is the designed behaviour: the verdict did not pass, so nothing changed. Show the reasons on screen. |
-| Real engine breaks | Run `python -m modelswap --backend stub demo --fast`. The stub produces the same flow with fixed numbers. Say so. |
+| Real engine breaks | Run `python -m modelswap --backend stub demo --auto --fast`. The stub produces the same flow with fixed numbers. |
 | Everything fails | Play the backup video. |
 
 ## 7. Where things live

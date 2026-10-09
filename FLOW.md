@@ -1,6 +1,6 @@
-# ML Model Swap: Operational Flows (3-Hour Sprint)
+# ML Model Swap: Operational Flows
 
-Overview of execution flows for evaluating, swapping, rolling back, and simulating two ML models with identical architecture.
+Overview of execution flows for evaluating, swapping, rolling back, and auditing ML models behind logical roles.
 
 ---
 
@@ -12,7 +12,7 @@ Overview of execution flows for evaluating, swapping, rolling back, and simulati
 Load models.yaml ──► Resolve Model A (Current) & Model B (Candidate)
         │
         ▼
-Verify Architecture: Confirm input_dim and output_dim match exactly
+Verify Architecture: Confirm input_dim, output_dim, and layer types match
         │
         ▼
 Run Validation Replay:
@@ -23,6 +23,7 @@ Run Validation Replay:
 Print Paired Comparison Matrix:
   ├── ΔAccuracy = Acc(B) - Acc(A)
   ├── ΔLatency = Latency(B) - Latency(A)
+  ├── Paired Disagreement Analysis
   └── Eligibility Verdict (PASS if ΔAcc ≥ 0 and Latency within threshold)
 ```
 
@@ -39,13 +40,14 @@ Check Preconditions: Model B exists & passed architecture validation
 Create Backup: Copy models.yaml -> models.yaml.bak
         │
         ▼
-Atomic Write: Update models.yaml
+Atomic Write: Update models.yaml (os.replace)
   ├── previous ◄── Model A
   └── current  ◄── Model B
         │
         ▼
 Run Smoke Test: Execute single inference forward pass with dummy batch
-  ├── PASS ──► Write audit record to swaps/<timestamp>.json ──► Done (Exit 0)
+        │
+  ├── PASS ──► Compute Weight Divergence (ΔW) ──► Log to swaps/<timestamp>.json ──► Done (Exit 0)
   └── FAIL ──► Restore models.yaml.bak ──► Output error (Exit 1)
 ```
 
@@ -65,21 +67,33 @@ Invert Pointers:
         │
         ▼
 Run Smoke Test on Restored Model
-  ├── PASS ──► Log rollback to swaps/ ──► Done (Exit 0)
+  ├── PASS ──► Log rollback to swaps/ ──► Report weight revert ──► Done (Exit 0)
   └── FAIL ──► Alert critical state
 ```
 
 ---
 
-## Flow 4: MATLAB Simulation & Visual Showcase
+## Flow 4: Interactive Demo Console
 ```
-[matlab/simulate_swap.m]
+[User CLI: python -m modelswap --backend real demo]
         │
-        ├── 1. Load weights W_A and W_B (exported from Python or generated in MATLAB)
-        ├── 2. Plot 2D Decision Boundaries (Model A vs Model B side-by-side)
-        ├── 3. Plot Weight Delta Heatmap: ΔW = W_B - W_A
-        └── 4. Simulate Live Data Stream:
-                 • t = 1..50: Inference with Model A
-                 • t = 51: SWAP EVENT TRIGGERED
-                 • t = 52..100: Seamless inference with Model B
+        ▼
+1. Detect Models & Read Presets:
+     [1] classifier (MLP Model A vs Model B)
+     [2] sentiment  (BERT vs RoBERTa)
+     [3] Custom .pt files
+        │
+        ▼
+2. User Selects Model Pair
+        │
+        ▼
+3. Interactive Command Loop:
+     [1] status   ──► Query active role and previous rollback pointer
+     [2] compare  ──► Run validation replay and print delta table
+     [3] apply    ──► Atomically swap active pointer with smoke test
+     [4] rollback ──► Instantly restore previous model
+     [5] reset    ──► Return to baseline state
+     [6] demo     ──► Run scripted 6-step walkthrough
+     [7] switch   ──► Switch to another model pair
+     [0] exit     ──► Exit console
 ```

@@ -1,7 +1,7 @@
 """Real engine: registry-backed status, compare, apply, rollback and reset.
 
 A role's `kind` in models.yaml picks the model family:
-- "mlp" (default): the 2D MLP pair used by the MATLAB demo. Identical architecture is required.
+- "mlp" (default): the 2D MLP pair (Model A baseline vs Model B candidate). Identical architecture is required.
 - "text_classification": fine-tuned BERT / RoBERTa. Each model is in its own class, so the
   role sets cross_architecture: true.
 

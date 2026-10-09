@@ -1,44 +1,43 @@
-# Tech Stack: ML Model Swap (3-Hour Sprint)
+# Tech Stack: ML Model Swap
 
-Overview of the tools, libraries, and runtime environments used to build and demonstrate ML Model Swap.
+Overview of the tools, libraries, and runtime environments powering `modelswap`.
 
 ---
 
-## 1. Programming Languages & Runtimes
-- **Python 3.11+**: Primary language for the core runtime, comparison engine, CLI, and model execution.
-- **MATLAB (R2023b / R2024a or GNU Octave)**: Used for interactive simulation, 2D decision boundary rendering, weight divergence heatmaps, and live data stream visualization.
+## 1. Core Programming Environment
+- **Python 3.11+ / 3.13**: Primary language for the core runtime, comparison engine, CLI, and model execution.
+- **Operating Systems**: Cross-platform (Windows, Linux, macOS).
 
 ---
 
 ## 2. Machine Learning Frameworks
-- **PyTorch / TorchScript (`torch`)**:
-  - Defines and executes the 2-layer MLP neural network architecture.
-  - Loads and evaluates weights for Model A (`model_a.pt`) and Model B (`model_b.pt`).
+- **PyTorch (`torch`)**:
+  - Neural network definition, checkpoint serialization (`.pt`), and evaluation.
+  - CUDA GPU acceleration enabled for transformer inference and fine-tuning.
+  - Fast tensor matrix operations for parameter divergence ($\Delta W$ Frobenius norms).
+- **Hugging Face Transformers (`transformers`)**:
+  - Pre-trained and fine-tuned architectures (`bert-base-uncased`, `roberta-base`).
+  - AutoTokenizer & AutoModelForSequenceClassification interfaces.
 - **Scikit-Learn & NumPy**:
-  - Generates synthetic 2D classification datasets (e.g., `make_moons` or `make_classification`).
-  - Evaluates performance metrics (Accuracy, F1-Score, Confusion Matrix, Latency).
+  - Synthetic dataset generation (`make_moons`) and standardization.
+  - Evaluation metrics: accuracy, cross-entropy loss, and percentile latency timing.
 
 ---
 
 ## 3. Configuration & Swap Engine
-- **PyYAML**: Parses and atomically updates the model registry (`models.yaml`).
-- **Pydantic (v2)**: Validates model schemas, tensor dimensions, and contract constraints.
-- **Python Standard Library (`os`, `shutil`, `json`, `time`)**:
-  - Provides atomic file replacement via `os.replace` (POSIX `rename(2)`).
-  - Handles backup restoration and writes audit records to `swaps/`.
+- **PyYAML (`yaml`)**:
+  - Model registry configuration (`models.yaml`) parsing and serialization.
+- **Python Standard Library (`os`, `shutil`, `tempfile`, `hashlib`, `time`)**:
+  - Atomic file replacement via `os.replace` (POSIX `rename(2)` semantics).
+  - Checksum hashing (SHA256) for parameter state integrity.
+  - Automatic backup restoration on failure (`models.yaml.bak`).
+  - Structured audit trail written to `swaps/<timestamp>_<role>.json`.
 
 ---
 
-## 4. CLI & Interface
-- **Typer / Argparse**: Powers the lightweight command-line interface:
-  - `modelswap compare`
-  - `modelswap apply`
-  - `modelswap rollback`
-
----
-
-## 5. MATLAB Simulation Stack
-- **MATLAB Plotting & Graphics (`plot`, `contourf`, `imagesc`, `subplot`)**:
-  - Renders side-by-side decision boundary surfaces for Model A and Model B.
-  - Visualizes weight tensor difference: $\Delta W = W_B - W_A$.
-  - Animates a real-time stream of predictions demonstrating seamless handover during the swap event.
+## 4. CLI & Interactive Experience
+- **Argparse & Color-formatted Terminal Output**:
+  - CLI commands (`status`, `compare`, `apply`, `rollback`, `reset`, `demo`).
+  - Interactive console menu with model pair selection and interactive action prompts.
+- **Pytest**:
+  - 105+ unit and integration tests covering architecture checks, comparison logic, engine operations, weight diffing, and CLI interactions.
