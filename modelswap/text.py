@@ -61,7 +61,7 @@ def read_text_meta(path: str | Path) -> dict:
 def load_text_checkpoint(path: str | Path):
     """Return (model, tokenizer, meta) in eval mode."""
     checkpoint = _read_checkpoint(path)
-    config = AutoConfig.from_dict(checkpoint["config"])
+    config = AutoConfig.for_model(**checkpoint["config"])
     model = AutoModelForSequenceClassification.from_config(config)
     model.load_state_dict(checkpoint["state_dict"])
     model.eval()

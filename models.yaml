@@ -3,25 +3,22 @@ roles:
     architecture: mlp_2layer
     input_dim: 2
     output_dim: 2
-    current: "models/model_a.pt"
-    previous: "models/model_a.pt"
-    candidate: "models/model_b.pt"
+    current: models/model_a.pt
+    previous: models/model_a.pt
+    candidate: models/model_b.pt
     thresholds:
       min_accuracy: 0.85
       max_latency_ms: 5.0
-
-  # Text role: BERT (current) vs RoBERTa (candidate), both fine-tuned on SST-2.
-  # Each model is in its own class, so cross_architecture is set explicitly.
   sentiment:
     kind: text_classification
     task: sst2
     num_labels: 2
     cross_architecture: true
-    initial: "models/text/bert_base_uncased.pt"
-    current: "models/text/bert_base_uncased.pt"
-    previous: "models/text/bert_base_uncased.pt"
-    candidate: "models/text/roberta_base.pt"
-    data: "data/sst2/validation.jsonl"
+    initial: models/text/bert_base_uncased.pt
+    current: models/text/bert_base_uncased.pt
+    previous: models/text/bert_base_uncased.pt
+    candidate: models/text/roberta_base.pt
+    data: data/sst2/validation.jsonl
     thresholds:
       min_accuracy: 0.85
       max_latency_ms: 100.0

@@ -36,14 +36,17 @@ DEFAULTS = dict(
 )
 
 
-def accuracy(model, tokenizer, sentences, labels, max_len, batch_size=64) -> float:
+def accuracy(model, tokenizer, sentences, labels, max_len, batch_size=64, device=None) -> float:
+    if device is None:
+        device = next(model.parameters()).device
     model.eval()
     correct = 0
     with torch.no_grad():
         for start in range(0, len(sentences), batch_size):
             enc = tokenizer(sentences[start:start + batch_size], padding=True, truncation=True,
                             max_length=max_len, return_tensors="pt")
-            preds = model(**enc).logits.argmax(dim=-1).numpy()
+            enc = {k: v.to(device) for k, v in enc.items()}
+            preds = model(**enc).logits.argmax(dim=-1).cpu().numpy()
             correct += int((preds == labels[start:start + batch_size]).sum())
     return correct / len(sentences)
 
@@ -54,8 +57,12 @@ def train(base: str, out: str | Path, log_out: str | Path | None = None, **overr
     random.seed(cfg["seed"])
     np.random.seed(cfg["seed"])
 
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Training on device: {device} ({torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'})")
+
     tokenizer = AutoTokenizer.from_pretrained(base)
     model = AutoModelForSequenceClassification.from_pretrained(base, num_labels=2)
+    model.to(device)
 
     train_sents, train_labels = load_sentences(cfg["train_data"])
     val_sents, val_labels = load_sentences(cfg["val_data"])
@@ -67,13 +74,15 @@ def train(base: str, out: str | Path, log_out: str | Path | None = None, **overr
 
     loss_history = []
     model.train()
-    for _ in range(cfg["epochs"]):
+    for ep in range(cfg["epochs"]):
         order = np.random.permutation(len(train_sents))
         for start in range(0, len(order), cfg["batch_size"]):
             idx = order[start:start + cfg["batch_size"]]
             enc = tokenizer([train_sents[i] for i in idx], padding=True, truncation=True,
                             max_length=cfg["max_len"], return_tensors="pt")
-            loss = model(**enc, labels=torch.from_numpy(train_labels[idx])).loss
+            enc = {k: v.to(device) for k, v in enc.items()}
+            labels_tensor = torch.from_numpy(train_labels[idx]).to(device)
+            loss = model(**enc, labels=labels_tensor).loss
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
@@ -81,7 +90,8 @@ def train(base: str, out: str | Path, log_out: str | Path | None = None, **overr
             optimizer.zero_grad()
             loss_history.append(round(float(loss), 6))
 
-    val_acc = accuracy(model, tokenizer, val_sents, val_labels, cfg["max_len"])
+    val_acc = accuracy(model, tokenizer, val_sents, val_labels, cfg["max_len"], device=device)
+    model.to("cpu")
     save_text_checkpoint(model, base, out)
 
     summary = {
