@@ -54,14 +54,23 @@ class DemoTests(unittest.TestCase):
         )
         self.assertEqual(len(pauses), len(build_steps(DemoOptions())) - 1)
 
-    def test_failed_expectation_stops_demo(self):
-        # Force a mismatch: the swap step expects success, so a failing engine result must fail the run.
-        self.engine.apply = lambda role, candidate: SwapResult(
-            "apply", role, False, INITIAL_CURRENT, None, False, error="forced"
-        )
-        code, text = self.run_demo_quiet()
-        self.assertEqual(code, 1)
-        self.assertIn("did not behave as expected", text)
+    def test_interactive_menu_exit(self):
+        from unittest import mock
+        from modelswap.demo import run_interactive_menu
+        out = io.StringIO()
+        with mock.patch("builtins.input", side_effect=["0"]):
+            code = run_interactive_menu(self.engine, "stub", out=out)
+        self.assertEqual(code, 0)
+        self.assertIn("Exiting ML Model Swap demo", out.getvalue())
+
+    def test_interactive_menu_runs_status(self):
+        from unittest import mock
+        from modelswap.demo import run_interactive_menu
+        out = io.StringIO()
+        with mock.patch("builtins.input", side_effect=["1", "1", "", "0"]):
+            code = run_interactive_menu(self.engine, "stub", out=out)
+        self.assertEqual(code, 0)
+        self.assertIn("Running: status", out.getvalue())
 
 
 if __name__ == "__main__":

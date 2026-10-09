@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import TextIO
 
 from modelswap.commands import execute
-from modelswap.demo import DemoOptions, run_demo
+from modelswap.demo import DemoOptions, run_demo, run_interactive_menu
 from modelswap.engine import BACKEND_CHOICES, load_engine
 from modelswap.results import EngineError
 from modelswap.runtime import DEFAULT_REGISTRY
@@ -72,11 +72,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("reset", help="restore the initial registry state (rehearsal)")
     add_role(p)
 
-    p = sub.add_parser("demo", help="run the scripted live demo (on a temporary copy)")
+    p = sub.add_parser("demo", help="run the interactive or scripted demo (on a temporary copy)")
     add_role(p)
     p.add_argument("--candidate", default=DEFAULT_CANDIDATE, help=f"candidate model (default: {DEFAULT_CANDIDATE})")
-    p.add_argument("--fast", action="store_true", help="no pauses between steps")
-    p.add_argument("--show-failure", action="store_true", help="also show a rejected swap")
+    p.add_argument("--fast", action="store_true", help="no pauses between steps (runs non-interactive)")
+    p.add_argument("--show-failure", action="store_true", help="also show a rejected swap in automated flow")
+    p.add_argument("-i", "--interactive", action="store_true", help="force interactive model and command selection menu")
+    p.add_argument("--auto", action="store_true", help="run non-interactive scripted demo flow instead of menu")
     return parser
 
 
@@ -126,4 +128,18 @@ def _run_demo(args: argparse.Namespace, out: TextIO) -> int:
             fast=args.fast,
             show_failure=args.show_failure,
         )
+
+        is_interactive = getattr(args, "interactive", False) or (
+            not args.fast and not getattr(args, "auto", False) and sys.stdin.isatty()
+        )
+        if is_interactive:
+            return run_interactive_menu(
+                engine,
+                backend,
+                out=out,
+                workdir=workdir,
+                default_role=args.role,
+                default_candidate=args.candidate,
+                registry_path=registry_copy,
+            )
         return run_demo(engine, backend, options, out=out, workdir=workdir)
