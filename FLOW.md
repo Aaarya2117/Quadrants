@@ -54,6 +54,7 @@ Each flow lists its trigger, steps, decision points, and outputs.
    ├── if contract passed:
    │     1. Full swap (risk from comparison)
    │     3. Quantized variant, only if a quantized reference exists in the comparison
+   │        (created beforehand with Flow 10)
    ├── always:
    │     2. Keep current (with the main reasons)
    └── if contract failed:
@@ -150,7 +151,7 @@ Only high-confidence matches are eligible for automatic edits. Medium and low ma
 
 ## Flow 7: Weight Verification
 
-**Trigger:** before a comparison or apply that uses a reference with a digest.
+**Trigger:** before a comparison, apply, or conversion that uses a reference with a digest.
 
 ```
 1. Resolve the reference to a local model (Ollama tag or local path)
@@ -160,7 +161,7 @@ Only high-confidence matches are eligible for automatic edits. Medium and low ma
    └── mismatch or missing model → stop with the expected and actual digest
 ```
 
-No swap is applied with an unverified digest.
+No swap is applied with an unverified digest. For a converted candidate, the digest is the one computed in Flow 10, so apply checks that the file it swaps in is the file that was tested.
 
 ## Flow 8: Reviewing a Swap (Team Reader's Flow)
 
@@ -188,3 +189,42 @@ No swap is applied with an unverified digest.
 4. Set a status: success if at least one option is "full swap" with low or medium risk, neutral otherwise
 5. Apply is not run by the action. The team applies a chosen option with the manual workflow dispatch, which runs Flow 3 or Flow 4
 ```
+
+## Flow 10: Convert Weights
+
+**Trigger:** `modelswap convert --source <ref> --to gguf [--quantization <scheme>] --out <dir>`
+
+```
+1. Resolve and verify the source (Flow 7)
+   ├── source files found, digest matches (if pinned) → continue
+   └── missing or mismatch → stop with the expected and actual digest
+          │
+2. Convert the format
+   ├── read each tensor from the source (safetensors)
+   ├── rename to the target scheme; reshape or transpose where the layout needs it
+   ├── write tensors + tokenizer + model settings into the GGUF file
+   └── converter fails (for example, unsupported architecture) → stop, register nothing
+          │
+3. Quantize (only if --quantization is given)
+   ├── store weights in groups with a scale factor and low-bit integers
+   └── write the quantized file next to the 16-bit file
+          │
+4. Validate the output
+   ├── tensor count and shapes match the source
+   ├── file loads in the backend
+   ├── short test generation returns text
+   └── any check fails → stop, delete the partial output, register nothing
+          │
+5. Compute the output digest and register the model with the backend
+   └── Ollama: generate a Modelfile pointing at the file and create the model
+          │
+6. Write conversions/<timestamp>.json
+   ├── source, source digest, converter versions
+   ├── target format, quantization, output digest
+   └── validation result
+          │
+7. Print the candidate reference (backend:model@digest)
+   └── next step: modelswap compare --candidate <ref> (Flow 1)
+```
+
+The conversion does not change `models.yaml`. A converted model is a candidate and must pass Flow 1 and Flow 2 before Flow 3 or Flow 4 can apply it.

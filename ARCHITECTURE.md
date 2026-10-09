@@ -53,6 +53,12 @@ modelswap/
 │   ├── graders.py          # Accuracy and format grading
 │   ├── stats.py            # Paired differences, McNemar, bootstrap intervals
 │   └── metrics.py          # Cost, p50/p95 latency
+├── convert/
+│   ├── pipeline.py         # Orchestrates verify, convert, quantize, validate, register
+│   ├── hf_source.py        # Reads Hugging Face weights (safetensors) and config
+│   ├── gguf.py             # Wraps the llama.cpp converter and quantizer
+│   ├── validate.py         # Tensor count and shape check, load test, test generation
+│   └── record.py           # Writes conversions/<timestamp>.json
 ├── options/
 │   ├── builder.py          # Builds swap options from the comparison
 │   └── policy.py           # Risk levels from policy.yaml
@@ -79,6 +85,8 @@ my-app/
 │   └── invoice_extractor.yaml
 ├── suites/
 │   └── invoices.yaml       # Recorded requests with expected results
+├── models/                 # Converted weights (generated, git-ignored)
+├── conversions/            # Conversion records (generated, committed)
 ├── policy.yaml             # Risk rules for options
 ├── src/                    # Application code using get("role")
 ├── runs/                   # Comparison outputs (generated)
@@ -90,6 +98,8 @@ my-app/
 ```
 Role ──< ModelRef (current, previous)
 Role ──1 Contract
+Conversion = (SourceRef, target format, quantization) ──1 ModelRef (the candidate it produces)
+Conversion ──1 ConversionRecord (source digest, converter versions, output digest, validation result)
 Suite ──< Case
 Comparison = (Role, Candidate, Suite) ──< PairedResult (case, current_outcome, candidate_outcome)
 Comparison ──< Option (id, action, risk, expected_changes, steps)
@@ -133,6 +143,19 @@ def check(contract: Contract, response: Response) -> ContractResult:
     """Returns passed, list of violations (field, rule, actual, expected)."""
 ```
 
+### Weight conversion
+
+```python
+class ConvertRequest(BaseModel):
+    source: str                  # e.g. "hf:google/gemma-3-4b-it"
+    target: Literal["gguf"]
+    quantization: str | None     # e.g. "q4_K_M"; None keeps 16-bit
+    out_dir: Path
+
+def convert(req: ConvertRequest) -> ConversionResult:
+    """Returns the candidate ModelRef, output digest, and validation result."""
+```
+
 ### Change set
 
 ```python
@@ -168,7 +191,29 @@ class ChangeSet(BaseModel):
 - Reads the previous reference from `models.yaml`, or the reverse of the last audit record for source edits.
 - Writes its own audit record and runs the smoke test.
 
-## 9. Policy and Risk
+## 9. Weight Conversion
+
+A model is a set of named tensors plus metadata (tokenizer, layer count, context length). The conversion pipeline changes how they are stored:
+
+1. **Verify source.** Resolve the source reference to local files and check the digest if one is pinned. A mismatch stops the run.
+2. **Convert format.** Read each tensor, rename it to the target's scheme (for example `model.layers.0.self_attn.q_proj.weight` to `blk.0.attn_q.weight`), reshape or transpose it where the target layout needs it, and write all tensors with the tokenizer and settings into the GGUF file. The numbers stay the same. The step wraps the llama.cpp converter rather than reimplementing it.
+3. **Quantize (optional).** Split weights into small groups, store a scale factor per group, and store each weight as a low-bit integer (`integer ≈ weight / scale`). At run time the backend multiplies by the scale to recover an approximation. The file is smaller and faster; the rounding error is the cost.
+4. **Validate.** Check that the tensor count and shapes match the source (format conversion only), load the file, and run a short test generation. Failure stops the pipeline before anything is registered.
+5. **Register.** Compute the output digest and create the model in the backend (for Ollama, from a generated Modelfile that points at the file).
+6. **Record.** Write `conversions/<timestamp>.json` with the source and its digest, converter versions, target format, quantization, output digest, and validation result.
+
+```
+HF safetensors ──> verify ──> convert ──> (quantize) ──> validate ──> register ──> candidate ModelRef
+                                                                                         │
+                                                                         modelswap compare (Flow 1)
+```
+
+Design rules:
+- Conversion never edits `models.yaml`. Its output is a candidate that enters the normal compare, options, and apply path.
+- The output digest is part of the candidate reference (`backend:model@digest`), so apply can check that the file it tested is the file it swaps in.
+- Quantized variants (option 3) are produced by this pipeline from the same source as the candidate.
+
+## 10. Policy and Risk
 
 `policy.yaml` defines how options are rated:
 
@@ -188,14 +233,15 @@ alpha: 0.05
 
 Risk is computed from the comparison results and the policy, not from model output.
 
-## 10. Safety
+## 11. Safety
 
-- Secrets come from environment variables. The config loader rejects inline keys.
+- Secrets come from environment variables (including a Hugging Face token for downloads). The config loader rejects inline keys.
+- Conversion writes only inside its `--out` directory and `conversions/`, and never overwrites an existing output file without `--force`.
 - Audit records and reports contain no secrets and only masked recorded inputs.
 - Apply refuses to run when the comparison is incomplete, the contract failed, or the change set hash no longer matches the reviewed one.
 - The source editor touches only the files listed in the scan configuration.
 
-## 11. Technology Choices
+## 12. Technology Choices
 
 | Concern | Choice | Reason |
 |---------|--------|--------|
@@ -206,11 +252,14 @@ Risk is computed from the comparison results and the policy, not from model outp
 | Source edits | libcst or tree-sitter | Edits code structure rather than raw text, reducing mistakes |
 | Storage | JSON files in the repository | Audit trail that travels with the code |
 | Statistics | NumPy, SciPy | Standard paired tests and bootstrap |
+| Weight conversion | llama.cpp converter and quantizer, safetensors reader | Maintained tools that track new architectures; we orchestrate and verify them |
 | CI | GitHub composite Action | Works without a hosted service |
 
-## 12. Known Risks
+## 13. Known Risks
 
 - **Scanner false positives or negatives.** Mitigated by confidence thresholds and the drift guard before apply.
 - **Quality differences not covered by the suite.** Stated in the README; the suite is the team's responsibility.
+- **Silent behavior change in conversion.** Mitigated by the tensor count and shape check, the load and test generation, and the normal contract and comparison. Converter versions are recorded.
+- **Unsupported architectures.** The converter may not support a new model. The pipeline fails with the converter's message and registers nothing.
 - **Weights not present locally.** The digest check fails the swap rather than applying an unverified reference.
 - **Prompt drift.** Not handled automatically; surfaced by the comparison, fixed by a person.

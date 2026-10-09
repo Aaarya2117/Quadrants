@@ -2,7 +2,7 @@
 
 **Compare, choose, and swap open-weight models in your codebase. Roll back in one command.**
 
-Model Swap replaces an open-weight model in a running application without a hunt through the code. It compares the model in production with a candidate on your own requests, shows the swap options and their risks, applies the chosen option by changing the model reference, runs a smoke test, and records the change. If anything is wrong, one command restores the previous model.
+Model Swap replaces an open-weight model in a running application without a hunt through the code. It converts downloaded weights into a format your backend can run, compares the model in production with a candidate on your own requests, shows the swap options and their risks, applies the chosen option by changing the model reference, runs a smoke test, and records the change. If anything is wrong, one command restores the previous model.
 
 ## Why
 
@@ -48,6 +48,13 @@ Requirements: Python 3.11+, [Ollama](https://ollama.com) for local models.
 ```bash
 pip install modelswap
 
+# Convert downloaded weights into a candidate your backend can run
+modelswap convert \
+  --source hf:google/gemma-3-4b-it \
+  --to gguf \
+  --quantization q4_K_M \
+  --out models/
+
 # Compare the current model with a candidate on the role's recorded requests
 modelswap compare \
   --role invoice_extractor \
@@ -66,6 +73,25 @@ modelswap rollback --role invoice_extractor
 ```
 
 Open `runs/demo/report.html` for the side-by-side comparison.
+
+## Weight Conversion
+
+Open-weight models are published in one format and run in another. `modelswap convert` turns downloaded weights into a model your backend can load, and registers the result as a swap candidate.
+
+What it does:
+
+1. **Verifies the source.** Checks the downloaded weights against a pinned digest, if one is given.
+2. **Converts the format.** Tensors are renamed to the target's naming scheme and, where the target layout needs it, reshaped or transposed. The numbers themselves stay the same. The tokenizer and model settings (layers, context length) are copied into the file's metadata.
+3. **Quantizes (optional).** Weights are stored with fewer bits, for example 16-bit to 4-bit, so the model is smaller and faster. This adds a small rounding error.
+4. **Validates the output.** The tensor count and shapes match the source, the file loads, and a short test generation runs.
+5. **Registers the result.** Computes the digest of the converted file and adds the model to the backend (for Ollama, this creates the model from the file).
+6. **Records the conversion.** Writes a record to `conversions/` and prints a candidate reference to pass to `modelswap compare`.
+
+| Source | Target | Backend |
+|--------|--------|---------|
+| Hugging Face (`safetensors`) | GGUF | Ollama, llama.cpp |
+
+Conversion uses established converters (llama.cpp for GGUF) instead of reimplementing them. A converted model is never applied directly: quantization can change behavior, so it goes through the same compare, options, and apply path as any other candidate. Option 3 (Quantized variant) is produced by this command.
 
 ## Comparing Models
 
@@ -153,12 +179,14 @@ on:
 
 - Passing the contract and the comparison lowers risk; it does not guarantee quality on inputs your suite does not cover.
 - Prompts tuned for the old model may need adjustment for the new one. Model Swap reports this but does not rewrite prompts.
-- Model weights are not stored in the repository. The registry records a digest, and the tool verifies it before applying.
+- Model weights are not stored in the repository. Converted files go to the `--out` directory (git-ignored). The registry records a digest, and the tool verifies it before applying.
+- Conversion supports Hugging Face to GGUF only. It does not train or fine-tune weights, and a converted model can behave differently from the original, especially after quantization.
 - Automatic staged or canary swaps are planned, not included in the hackathon build.
 
 ## Roadmap
 
 - Staged swaps with automatic promotion and rollback on metric regression
+- More conversion targets (ONNX, MLX) and more quantization schemes
 - Integration with model registries for weight pulling and verification
 - Hot reload in serving platforms, so applications pick up changes without restarting
 

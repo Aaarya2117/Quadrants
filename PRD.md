@@ -6,11 +6,12 @@
 
 ## 1. Overview
 
-Model Swap is an open-source tool that replaces an open-weight model in a running application with a new one, safely and reversibly. It compares the model currently in production with a candidate on the team's own workload, presents the swap options with their trade-offs, and applies the chosen option by changing the model reference in the codebase. Every swap is verified, recorded, and can be rolled back in one command.
+Model Swap is an open-source tool that replaces an open-weight model in a running application with a new one, safely and reversibly. It converts downloaded weights into a format the serving backend can run, compares the model currently in production with a candidate on the team's own workload, presents the swap options with their trade-offs, and applies the chosen option by changing the model reference in the codebase. Every swap is verified, recorded, and can be rolled back in one command.
 
 ## 2. Problem
 
 - Teams switch models to cut cost, improve privacy, or adopt a better release. The switch is usually a manual edit scattered across the codebase: hardcoded model names, prompts tuned for the old model, and output parsers that assume its format.
+- Open-weight models are published in one format (for example Hugging Face `safetensors`) and run in another (for example GGUF in Ollama). Converting and quantizing them is a manual, error-prone step, and a bad conversion changes model behavior without any warning.
 - Nobody has a clear picture of how the candidate differs from the current model on the team's real requests before the change goes out.
 - When a swap goes wrong, rollback means finding and reverting several edits under pressure.
 
@@ -24,11 +25,14 @@ Model Swap is an open-source tool that replaces an open-weight model in a runnin
 | G4 | Keep the application running through the swap | Application code outside the reference is untouched; the new model passes the contract checks before it is applied |
 | G5 | Make every swap reversible | `rollback` restores the previous reference in one command, verified by test |
 | G6 | Record every decision | Each swap writes an audit record with the comparison, the chosen option, and the approver |
+| G7 | Convert weights into a runnable, verified candidate | One command converts and optionally quantizes weights, validates the result, and yields a candidate reference with a digest |
 
 ## 4. Non-Goals (Hackathon Scope)
 
 - Hosting, serving, or load-balancing models
-- Downloading or training model weights as part of the swap (the tool points at weights, it does not manage their storage)
+- Training or fine-tuning model weights
+- Storing weights in the repository or hosting a weight registry (converted files stay in a local output directory; the registry holds a reference and digest)
+- Conversion targets beyond Hugging Face to GGUF (ONNX and MLX are future work)
 - Automatic traffic splitting in production (canary is a stretch goal)
 - Rewriting prompts automatically for the new model
 - Judging open-ended creative quality
@@ -55,10 +59,17 @@ A candidate can only take a role if it passes the role's contract: the tool sche
 After comparison, the tool presents options such as:
 1. **Full swap:** switch the role to the candidate immediately.
 2. **Keep current:** no change; report why the candidate was not chosen.
-3. **Quantized variant:** use a smaller quantization of the same candidate, if it still passes.
+3. **Quantized variant:** use a smaller quantization of the same candidate, if it still passes. The variant is produced by weight conversion (section 6.5).
 4. **Staged swap (stretch):** route a fraction of requests to the candidate first.
 
 Each option lists the expected changes in quality, cost, and latency, the risk level, and the steps the tool will perform.
+
+### 6.5 Weight conversion
+A model is a set of named tensors (the weights) plus metadata, stored in a file format. Conversion changes how those weights are stored, in two ways:
+- **Format conversion:** reads the source tensors, renames them to the target's naming scheme, reshapes or transposes them where the target layout requires it, and writes them with the tokenizer and model settings into the target format. The numbers themselves stay the same.
+- **Quantization:** stores the weights with fewer bits (for example 16-bit to 4-bit) using a scale factor per small group of weights. The file is smaller and faster to run, at the cost of a small rounding error.
+
+Because conversion, and quantization in particular, can change behavior, a converted model is only a candidate. It must pass the contract and comparison before any swap, like any other candidate.
 
 ## 7. Functional Requirements
 
@@ -105,6 +116,17 @@ Each option lists the expected changes in quality, cost, and latency, the risk l
 - FR-8.2 A swap cannot be applied while a comparison is incomplete or the contract check failed.
 - FR-8.3 Every apply and rollback is blocked unless the working tree is clean or the change is the only diff.
 
+### FR-9 Weight conversion
+- FR-9.1 `modelswap convert --source <ref> --to gguf [--quantization <scheme>] --out <dir>` converts the source weights into the target format.
+- FR-9.2 If the source reference is pinned with a digest, the tool verifies it before converting and stops on a mismatch.
+- FR-9.3 Format conversion preserves every tensor: the tool checks that the tensor count and shapes match the source and fails the conversion otherwise.
+- FR-9.4 Quantization is optional and uses a named scheme (for example `q8_0`, `q4_K_M`). The scheme is recorded in the model reference.
+- FR-9.5 The tool validates the output by loading it and running a short test generation. A file that does not load is never registered.
+- FR-9.6 The converted file's digest is computed and the model is registered with the backend (for Ollama, created from the file). The tool prints a candidate reference that `compare` accepts.
+- FR-9.7 Every conversion writes a record to `conversions/<timestamp>.json`: source, source digest, tool and converter versions, target format, quantization, output digest, and validation result.
+- FR-9.8 Conversion uses established converters (llama.cpp for GGUF) and does not change the registry. Only `apply` changes `models.yaml`.
+- FR-9.9 Secrets (for example a Hugging Face token) come from environment variables only.
+
 ## 8. Non-Functional Requirements
 
 - **Reversibility:** every swap can be undone in one command, tested in CI.
@@ -116,6 +138,7 @@ Each option lists the expected changes in quality, cost, and latency, the risk l
 ## 9. Success Metrics (Hackathon)
 
 - A full cycle runs on the demo project: compare, options, apply, smoke test pass, rollback, audit records.
+- A Hugging Face model is converted to GGUF and quantized with one command, loads in Ollama, and passes the tensor-count and shape check.
 - A deliberately broken candidate is rejected at the contract stage and never applied.
 - The source path applies a swap to a demo project with three hardcoded references and leaves all other lines unchanged.
 - The rollback restores the original files byte-for-byte.
@@ -125,7 +148,7 @@ Each option lists the expected changes in quality, cost, and latency, the risk l
 | Window | Milestone |
 |--------|-----------|
 | Hours 0–6 | Repo, `models.yaml` schema, `modelswap.get()`, Ollama backend |
-| Hours 6–14 | Contract checker, comparison engine with paired metrics |
+| Hours 6–14 | Contract checker, comparison engine with paired metrics, weight conversion (Hugging Face to GGUF, quantization, validation) |
 | Hours 14–22 | Options and policy risk levels, apply on registry path, smoke test |
 | Hours 22–30 | Rollback, audit records, source scanner (high-confidence matches only) |
 | Hours 30–38 | Source path apply, HTML and Markdown reports, GitHub Action comment |
@@ -140,11 +163,14 @@ Each option lists the expected changes in quality, cost, and latency, the risk l
 | Passing contract checks does not guarantee quality | Comparison metrics are shown before apply; the options show risk, not a guarantee |
 | Prompts tuned for the old model degrade the new one | Contract and comparison cover this; prompt rewriting is a non-goal |
 | Model weights are large and not stored in the repo | Registry stores a digest and pull reference; the tool verifies the digest before applying |
+| Conversion silently changes model behavior (tensor mix-ups, lossy quantization) | Tensor count and shape check, load and test generation, then the normal contract and comparison before any swap |
+| Converter tooling changes between versions | Converter versions are recorded in each conversion record; the output digest is checked at apply time |
 | Time pressure | Cut order: source path first, then staged swap; registry path, contract check, and rollback are protected |
 
 ## 12. Future Work
 
 - Staged and canary swaps with automatic promotion and rollback on metric regression
+- More conversion targets (ONNX, MLX) and more quantization schemes
 - Weight pulling and digest verification integrated with model registries
 - Automatic prompt adaptation proposals for the candidate, reviewed before apply
 - Integration with serving platforms to reload models without restarting the application

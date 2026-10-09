@@ -16,13 +16,14 @@
 
 **Proposed solution.** Model Swap is an open-source tool that replaces a model in a running application safely and reversibly. Application code asks for a role (for example, `invoice_extractor`) instead of a model name, and a `models.yaml` registry maps that role to a model. The tool:
 
-1. Compares the current model with a candidate on the team's recorded requests.
-2. Checks each candidate against the output contract the code depends on.
-3. Presents swap options with risk levels and expected changes.
-4. Applies the chosen option by changing the model reference, after showing the diff.
-5. Runs a smoke test, rolls back automatically on failure, and writes an audit record.
+1. Converts downloaded weights (Hugging Face to GGUF, with optional quantization) into a validated candidate for the local backend.
+2. Compares the current model with a candidate on the team's recorded requests.
+3. Checks each candidate against the output contract the code depends on.
+4. Presents swap options with risk levels and expected changes.
+5. Applies the chosen option by changing the model reference, after showing the diff.
+6. Runs a smoke test, rolls back automatically on failure, and writes an audit record.
 
-**How it differs from existing solutions.** Evaluation frameworks report scores. Model Swap goes from the comparison to a controlled change in the codebase, with contract checks, a diff for approval, automatic rollback, and an audit trail. It also works on legacy code, where it finds hardcoded model references and migrates only the high-confidence matches.
+**How it differs from existing solutions.** Evaluation frameworks report scores and assume the model is already runnable. Model Swap also handles the weights step: it converts and quantizes the weights, checks the result, and sends the converted model through the same checks as any candidate. It then goes from the comparison to a controlled change in the codebase, with contract checks, a diff for approval, automatic rollback, and an audit trail. It also works on legacy code, where it finds hardcoded model references and migrates only the high-confidence matches.
 
 ---
 
@@ -52,6 +53,7 @@
 **Stack.**
 - Python 3.11+, Typer (CLI), Pydantic v2 with YAML, httpx (async), NumPy and SciPy (statistics)
 - Ollama for local models; any OpenAI-compatible endpoint as a second backend
+- llama.cpp converter and quantizer (wrapped by `modelswap convert`) and a safetensors reader for weight conversion
 - libcst or tree-sitter for safe source edits
 - JSON files for audit records, stored in the repository
 - GitHub composite Action for pull-request comments
@@ -59,16 +61,19 @@
 **Architecture.** The application calls `get(role)`. The registry resolves the role to a model reference. A separate swap engine works on the registry and, when needed, on source files. The main components:
 
 1. **Runtime:** registry loader, role client, and backends.
-2. **Comparison:** recorded-suite replay with caching, contract checks, graders, and paired statistics.
-3. **Options and policy:** builds swap options and assigns risk levels from `policy.yaml`.
-4. **Swap engine:** planner, atomic apply, smoke test, automatic rollback, and audit records.
-5. **Source scanner:** finds hardcoded references with confidence scores and applies only high-confidence edits on a branch.
-6. **Reports and CI:** Markdown and HTML reports, and a GitHub Action that comments on pull requests.
+2. **Weight conversion:** verifies the source, converts the format, optionally quantizes, validates the output, registers it, and writes a conversion record.
+3. **Comparison:** recorded-suite replay with caching, contract checks, graders, and paired statistics.
+4. **Options and policy:** builds swap options and assigns risk levels from `policy.yaml`.
+5. **Swap engine:** planner, atomic apply, smoke test, automatic rollback, and audit records.
+6. **Source scanner:** finds hardcoded references with confidence scores and applies only high-confidence edits on a branch.
+7. **Reports and CI:** Markdown and HTML reports, and a GitHub Action that comments on pull requests.
 
 **Key design choices.**
 - *Roles, not model names, in application code:* a swap changes one file, not the code.
 - *Contract before comparison:* a candidate that breaks the output format is rejected before any metric is compared.
 - *Model reference, not model weights, in the repository:* weights are large binaries. The registry stores the model and its digest, and the tool verifies the digest before applying.
+- *Wrap proven converters, verify the output:* conversion uses llama.cpp rather than a new converter. The tool adds the checks that matter for a swap: tensor count and shape match, load test, digest, and a record of converter versions.
+- *A converted model is only a candidate:* quantization can change behavior, so conversion never edits the registry. The result goes through contract and comparison first.
 - *Human approval and automatic rollback:* no swap is applied silently, and a failed smoke test restores the previous state.
 
 **Status.** *Planned:* all components. The design is documented in `ARCHITECTURE.md` and `FLOW.md`.
@@ -81,7 +86,9 @@
 
 **Second innovation: contract-gated swaps.** Each role has a contract that describes the tool names, required fields, and output schema the calling code depends on. A candidate has to pass it before it can be considered.
 
-**Third innovation: migration of legacy code.** The source scanner finds hardcoded model references and rates each match by confidence. Only high-confidence matches are edited automatically, which lets teams adopt the tool without rewriting their code first.
+**Third innovation: conversion inside the swap loop.** Weight conversion and quantization are normally a separate, unrecorded manual step. Here they are one command that produces a verified, digest-pinned candidate, so the effect of a smaller quantization is measured on the team's own requests before it is applied.
+
+**Fourth innovation: migration of legacy code.** The source scanner finds hardcoded model references and rates each match by confidence. Only high-confidence matches are edited automatically, which lets teams adopt the tool without rewriting their code first.
 
 **Type of contribution.** A new capability that combines model comparison, controlled change, and rollback. It improves an existing manual process rather than replacing an evaluation tool.
 
@@ -91,17 +98,19 @@
 
 **Core features (MVP, in priority order).**
 1. Model registry and `get(role)` with the Ollama backend
-2. Recorded suite format and comparison (contract checks, paired metrics)
-3. Options with risk levels from `policy.yaml`
-4. Registry apply, smoke test, and automatic rollback
-5. Rollback command and audit records
-6. Markdown and HTML comparison report
-7. GitHub Action that posts the options as a pull-request comment
-8. Gemma 4 multimodal role in the demo project
-9. Source scanner and source-path apply on a git branch (high-confidence matches only)
-10. OpenAI-compatible backend
+2. Weight conversion: Hugging Face to GGUF, quantization, validation, digest, conversion record
+3. Recorded suite format and comparison (contract checks, paired metrics)
+4. Options with risk levels from `policy.yaml`
+5. Registry apply, smoke test, and automatic rollback
+6. Rollback command and audit records
+7. Markdown and HTML comparison report
+8. GitHub Action that posts the options as a pull-request comment
+9. Gemma 4 multimodal role in the demo project
+10. Source scanner and source-path apply on a git branch (high-confidence matches only)
+11. OpenAI-compatible backend
 
 **How we will demonstrate it.**
+- Convert a Hugging Face model to a quantized GGUF with one command, and show the validation result and the conversion record.
 - Run a comparison on the demo project: the candidate fails the contract on one role and passes on another.
 - Show the options table: "keep current" for the failing candidate, a full swap with low risk for the passing one.
 - Apply the swap, show the diff, and show the smoke test passing.
@@ -109,12 +118,12 @@
 - Show a legacy file with hardcoded references, scanned and migrated on a branch.
 - Keep a pre-recorded backup video in case the live demo fails.
 
-**What is realistic in 48 hours.** Items 1 to 5 and 6 in basic form are the core. Items 7 and 8 are targets. Items 9 and 10 are stretch goals, cut first if the schedule slips.
+**What is realistic in 48 hours.** Items 1 to 6 and 7 in basic form are the core. Items 8 and 9 are targets. Items 10 and 11 are stretch goals, cut first if the schedule slips.
 
 **Division of work.**
 - Arjun: runtime, swap engine, source scanner, CLI
 - Bhagat: recorded suites, contracts, comparison runner, demo project
-- Achyut: statistics, options, risk policy, digest verification
+- Achyut: weight conversion, statistics, options, risk policy, digest verification
 - Anirudh: reports, GitHub Action, README, pitch
 
 ---
@@ -134,6 +143,8 @@
 - The demo uses synthetic data, so it shows the method, not production accuracy.
 - Gemma 4 availability and vision support through local tooling must be verified before the event.
 - Staged or canary swaps are planned for later, not built during the hackathon.
+- Conversion supports Hugging Face to GGUF only, depends on the llama.cpp converter supporting the model's architecture, and cannot guarantee the converted model behaves like the original. The comparison measures that.
+- The conversion step needs enough disk space and memory for the model; the demo uses small models for this reason.
 
 ---
 
@@ -175,6 +186,7 @@
 - [ ] Confirm MLH portal registration is complete for all four members
 - [ ] Prepare answers for: what is built, what is planned, what is uncertain
 - [ ] Prepare answers for: "why not change the weights in the repo?" (size, sharing, digest verification)
+- [ ] Prepare answers for: "does conversion change the model?" (format conversion keeps the numbers; quantization adds rounding error, which the comparison measures)
 - [ ] Prepare answers for: "how is this different from evaluation frameworks?" (it applies and rolls back the change)
 - [ ] Bring a shared copy of `WORK_DIVISION.md` and `TEAM_ASSIGNMENTS.md`
 
@@ -190,7 +202,7 @@
 ### Build Milestones
 
 - [ ] CP1 (Hour 6): `get("role")` calls the model; `models.yaml` loads
-- [ ] CP2 (Hour 14): comparison on 15 cases produces paired results and a contract verdict
+- [ ] CP2 (Hour 14): `modelswap convert` produces a validated GGUF candidate from a Hugging Face model; comparison on 15 cases produces paired results and a contract verdict
 - [ ] CP3 (Hour 22): options list shows risk; bad candidate is "keep current"
 - [ ] CP4 (Hour 30): registry apply passes smoke test; rollback restores the file byte for byte
 - [ ] CP5 (Hour 38): source path applies on the demo branch; PR comment posts from the action
@@ -201,6 +213,7 @@
 - [ ] README matches implemented behaviour; remove any feature that does not work
 - [ ] Create the linked files or remove the links: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `LICENSE`
 - [ ] Verify every Ollama model tag in the quick start
+- [ ] Verify the `modelswap convert` example end to end on a clean machine, including the llama.cpp converter version
 - [ ] Replace any illustrative numbers with results from real runs
 - [ ] Commit the demo project, its recorded suites, and a sample audit record
 - [ ] Add a privacy note confirming the demo data is synthetic
